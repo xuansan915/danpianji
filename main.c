@@ -18,16 +18,6 @@
 
 sbit    POWEREN			=	P3^7;   //电源控制IO
 
-/*
-sfr     AUXR        =   0x8e;
-sfr     T2H         =   0xd6;
-sfr     T2L         =   0xd7;
-sfr     S2CON       =   0x9a;
-sfr     S2BUF       =   0x9b;
-sfr     IE2         =   0xaf;
-sfr     WDT_CONTR   =   0xc1;
-*/
-
 bit STATUS_flag = 0;
 bit busy;
 bit busy_1;
@@ -80,30 +70,32 @@ void TM0_Isr() interrupt 1
 
 void recieve_data_check()
 {
-	char bStart = 1;
-	char i = 0;
-	for(; i < START_LEN; i++)
+	if(wptr >= START_LEN)
 	{
-		if(buffer[i] != start_signal[i])//接收到不正确的信号
-		{
-			bStart = 0;
-			break;
-		}
-	}
-	if(bStart == 1)
-	{
+		char bStart = 1;
+		char i = 0;
 		wptr = 0;
-		POWEREN = 0;
-		status=STATUS_PW_ON;
-		STATUS_flag=1;
-		/*停止定时器*/
-		TR0 = 0;
-		ET0 = 0; /*使能定时器中断*/
+		for(; i < START_LEN; i++)
+		{
+			if(buffer[i] != start_signal[i])//接收到不正确的信号
+			{
+				bStart = 0;
+				break;
+			}
+		}
+		if(bStart == 1)
+		{
+			POWEREN = 0;
+			status=STATUS_PW_ON;
+			STATUS_flag=1;
+			/*停止定时器*/
+			TR0 = 0;
+			ET0 = 0; /*使能定时器中断*/
+		}
 	}
 	else if(wptr >= BUF_SIZE)
 	{
 		char i;	
-		wptr = 0;
 
 		for(i = 0;i<BUF_SIZE-3;i++)
 		{
@@ -117,29 +109,37 @@ void recieve_data_check()
 
 		if(i != BUF_SIZE-3)//接收到不正确的信号, 不处理消息，不响应
 		{
-			status=STATUS_ERROR;
-			STATUS_flag=1;
+			//wptr = 0;
+			//status=STATUS_ERROR;
+			//STATUS_flag=1;
 			return;
 		}
 
 		if(buffer[BUF_SIZE-3] == 0 && buffer[BUF_SIZE-2] == 1 && buffer[BUF_SIZE-1] == 0x7c) //开机
 		{
+			wptr = 0;
 			POWEREN = 0;
 			status=STATUS_PW_ON;
 			STATUS_flag=1;
+			/*停止定时器*/
+			TR0 = 0;
+			ET0 = 0; /*使能定时器中断*/	
 		}
 		else if(buffer[BUF_SIZE-3] == 0x1 && buffer[BUF_SIZE-2] == 0x11 && buffer[BUF_SIZE-1] == 0x7c) //关机
 		{
+			wptr = 0;
 			POWEREN = 1;
 			status=STATUS_PW_OFF;
 			STATUS_flag=1;
+			/*停止定时器*/
+			TR0 = 0;
+			ET0 = 0; /*使能定时器中断*/	
 		}	
-		/*停止定时器*/
-		TR0 = 0;
-		ET0 = 0; /*使能定时器中断*/	
+
 	}
 	return;
 }
+
 
 void Uart2Isr() interrupt 8
 {
@@ -159,6 +159,7 @@ void Uart2Isr() interrupt 8
 		time_init();
     }
 }
+
 
 void Uart2Init()
 {
@@ -274,23 +275,6 @@ void main()
 	Uart1SendStr(TimeStr);
 	Uart1SendStr("\r\n");
 	
-	#if 0
-	Uart2SendStr("Uart2 1Test !\r\n");
-	Uart2SendStr("Uart2 2Test !\r\n");
-	Uart2SendStr("Uart2 3Test !\r\n");
-
-	while (1)
-	{
-		//Uart2SendStr("Uart2Test !\r\n");
-		if (rptr != wptr)
-		{
-			Uart2SendStr("Uart2_rcv:");
-			Uart2Send(buffer[rptr++]);
-			Uart2SendStr("\r\n");
-			rptr &= 0x0f;
-		}
-	}
-	#else
 	while(1)
 	{
 		WDT_CONTR |= 0x10;  /*清看门狗*/ 
@@ -326,16 +310,17 @@ void main()
 			}			
 		}
 		
+		
 		if (rptr != wptr)
 		{
 			//Uart1SendStr("Uart1_rcv:");
 			//Uart1Send(rptr);
 			//Uart1Send("uart2_rcv:");
-			//Uart1Send(shuzhi_code[buffer[rptr++]]);     
+			//Uart1Send(shuzhi_code[buffer[rptr++]]);
 			//Uart1SendStr("uart2_rcv(HEX):");
-			Uart1Send(buffer[rptr++]);				
+			Uart1Send(buffer[rptr++]);
 			//Uart1SendStr("END\r\n");
-			if(rptr == BUF_SIZE)
+			if(rptr == BUF_SIZE || rptr == START_LEN)
 			{
 				rptr = 0;
 			}
@@ -355,5 +340,4 @@ void main()
 		//Uart1Send(num);		
 		recieve_data_check();
 	}
-	#endif
 }
